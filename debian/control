@@ -1,4 +1,4 @@
-Source: asterisk
+Source: range-asterisk
 Section: comm
 Priority: optional
 Maintainer: Range Networks, Inc. <info@rangenetworks.com>
@@ -6,7 +6,7 @@ Homepage: http://www.rangenetworks.com/
 Build-Depends: build-essential, debhelper (>= 7), pkg-config, autoconf
 Standards-Version: 3.7.3
 
-Package: asterisk
+Package: range-asterisk
 Version: 11.4.0
 Section: comm
 Priority: optional
