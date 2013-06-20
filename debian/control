@@ -7,7 +7,7 @@ Build-Depends: build-essential, debhelper (>= 7), pkg-config, autoconf
 Standards-Version: 3.7.3
 
 Package: range-asterisk
-Version: 11.4.0
+Version: 11.4.0.1
 Section: comm
 Priority: optional
 Architecture: i386
