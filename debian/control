@@ -7,11 +7,11 @@ Build-Depends: build-essential, debhelper (>= 7), pkg-config, autoconf
 Standards-Version: 3.7.3
 
 Package: range-asterisk
-Version: 11.4.0
+Version: 11.4.0.1
 Section: comm
 Priority: optional
 Architecture: i386
 Essential: no
-Depends: sqlite, sqlite3, libosip2-4, libglib2.0-0, libgl1-mesa-glx, libc6-i686, libasound2, pkg-config, libpcre3, gawk, libsqliteodbc, unixodbc, unixodbc-dev
+Depends: sqlite, sqlite3, libosip2-4, libglib2.0-0, libgl1-mesa-glx, libc6-i686, libasound2, pkg-config, libpcre3, gawk, libsqliteodbc, unixodbc
 Description: Asterisk Communication Framework.
 

@@ -28,12 +28,14 @@ then
 	sayAndDo wget http://downloads.asterisk.org/pub/telephony/asterisk/releases/asterisk-$VERSION.tar.gz
 fi
 
-if [ ! -d asterisk-$VERSION ]
+if [ -d asterisk-$VERSION ]
 then
-	sayAndDo tar zxf asterisk-$VERSION.tar.gz
+	sayAndDo rm -rf asterisk-$VERSION
 fi
 
+sayAndDo tar zxf asterisk-$VERSION.tar.gz
 sayAndDo cp menuselect.makeopts asterisk-$VERSION
-sayAndDo cp -R debian asterisk-$VERSION/
+sayAndDo mkdir asterisk-$VERSION/debian
+sayAndDo cp debian/* asterisk-$VERSION/debian/
 sayAndDo cd asterisk-$VERSION
 sayAndDo dpkg-buildpackage
