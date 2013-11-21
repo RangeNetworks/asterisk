@@ -1,5 +1,5 @@
-range-asterisk (11.6.0.1) UNRELEASED; urgency=low
+range-asterisk (11.6.0.1) unstable; urgency=low
 
     * Test
 
- -- Michael Iedema <michael.iedema@rangenetworks.com> Thu, 30 May 2013 00:11:00 -0700
+ -- Michael Iedema <michael.iedema@rangenetworks.com>  Thu, 30 May 2013 00:11:00 -0700
