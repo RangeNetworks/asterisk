@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=11.6.0
+VERSION=11.7.0
 
 sayAndDo () {
 	echo $@
