@@ -152,16 +152,21 @@ install-arch: build-arch
 	$(FETCH_ENV) $(MAKE) $(BUILDFLAGS) DESTDIR=$(CURDIR)/debian/tmp install
 	cp -a configs $(CURDIR)/debian/tmp/usr/share/asterisk/conf
 
+	mkdir -p $(CURDIR)/debian/range-asterisk/etc/init
+	cp $(CURDIR)/debian/asterisk.conf $(CURDIR)/debian/range-asterisk/etc/init/
+
 	dh_install -s --sourcedir=debian/tmp
 	dh_lintian -s
 
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/aelparse
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/conf2ael
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/muted
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/streamplayer
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/stereorize
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/hashtest*
-	$(RM) -f $(CURDIR)/debian/asterisk/usr/sbin/refcounter
+	cp $(CURDIR)/debian/tmp/usr/lib/libasteriskssl* $(CURDIR)/debian/range-asterisk/usr/lib/
+
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/aelparse
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/conf2ael
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/muted
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/streamplayer
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/stereorize
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/hashtest*
+	$(RM) -f $(CURDIR)/debian/range-asterisk/usr/sbin/refcounter
 
 #	extra_packs=`find $(SUBPACKS_EXTRA_DIRS_MOD) -name '*.so' -printf '%f\n'`\
 #		    ; cd $(CURDIR)/debian/asterisk-modules/usr/lib/asterisk/modules \
