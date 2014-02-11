@@ -34,8 +34,7 @@ then
 fi
 
 sayAndDo tar zxf asterisk-$VERSION.tar.gz
-sayAndDo cp menuselect.makeopts asterisk-$VERSION
 sayAndDo mkdir asterisk-$VERSION/debian
-sayAndDo cp debian/* asterisk-$VERSION/debian/
+sayAndDo cp -R debian/* asterisk-$VERSION/debian/
 sayAndDo cd asterisk-$VERSION
 sayAndDo dpkg-buildpackage
