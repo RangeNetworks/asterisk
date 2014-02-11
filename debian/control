@@ -3,7 +3,7 @@ Section: comm
 Priority: optional
 Maintainer: Range Networks, Inc. <info@rangenetworks.com>
 Homepage: http://www.rangenetworks.com/
-Build-Depends: build-essential, debhelper (>= 7), pkg-config, autoconf
+Build-Depends: build-essential, debhelper (>= 7), pkg-config, autoconf, libsqlite3-dev, unixodbc-dev, libssl-dev
 Standards-Version: 3.7.3
 
 Package: range-asterisk
