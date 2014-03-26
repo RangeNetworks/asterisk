@@ -2,7 +2,7 @@ language: cpp
 compiler: gcc
 
 before_install:
- - sudo apt-get install -qq unixodbc-dev
+ - sudo apt-get install -qq libssl-dev unixodbc-dev
 
 #install:
 #  - sh bootstrap.sh
