@@ -1,12 +1,12 @@
 language: cpp
 compiler: gcc
 
-#before_install:
-# - sudo apt-get install -qq libxyz
+before_install:
+ - sudo apt-get install -qq unixodbc-dev
 
 #install:
 #  - sh bootstrap.sh
 
 script:
-  - ./build.sh
+ - ./build.sh
 
