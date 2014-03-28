@@ -10,8 +10,8 @@ Package: range-asterisk
 Provides: asterisk
 Section: comm
 Priority: optional
-Architecture: i386
+Architecture: any
 Essential: no
-Depends: sqlite3, libc6-i686, pkg-config, libsqliteodbc, unixodbc
+Depends: sqlite3, libc6, pkg-config, libsqliteodbc, unixodbc
 Description: Range Networks - Tested Version of Asterisk
 

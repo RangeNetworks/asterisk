@@ -37,4 +37,4 @@ sayAndDo tar zxf asterisk-$VERSION.tar.gz
 sayAndDo mkdir asterisk-$VERSION/debian
 sayAndDo cp -R debian/* asterisk-$VERSION/debian/
 sayAndDo cd asterisk-$VERSION
-sayAndDo dpkg-buildpackage -ai386
+sayAndDo dpkg-buildpackage

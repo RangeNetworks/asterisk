@@ -1,6 +1,9 @@
 language: cpp
 compiler: gcc
 
+notifications:
+  irc: "chat.freenode.net#openbts"
+
 before_install:
  - sudo apt-get install -qq libssl-dev unixodbc-dev
 
