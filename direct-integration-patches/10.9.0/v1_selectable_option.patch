@@ -1,0 +1,154 @@
+Index: channels/sip/include/sip.h
+===================================================================
+--- channels/sip/include/sip.h	(revision 424158)
++++ channels/sip/include/sip.h	(working copy)
+@@ -224,6 +224,7 @@
+ #define DEFAULT_SDPOWNER   "root"          /*!< Default SDP username field in (o=) header unless re-defined in sip.conf */
+ #define DEFAULT_ENGINE     "asterisk"      /*!< Default RTP engine to use for sessions */
+ #define DEFAULT_STORE_SIP_CAUSE FALSE      /*!< Don't store HASH(SIP_CAUSE,<channel name>) for channels by default */
++#define DEFAULT_DIGESTALGORITHM "md5"      /*!< Default authentication digest algorithm */
+ #endif
+ /*@}*/
+ 
+@@ -1009,6 +1010,7 @@
+ 		AST_STRING_FIELD(authname);     /*!< Who we use for authentication */
+ 		AST_STRING_FIELD(uri);          /*!< Original requested URI */
+ 		AST_STRING_FIELD(okcontacturi); /*!< URI from the 200 OK on INVITE */
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(peersecret);   /*!< Password */
+ 		AST_STRING_FIELD(peermd5secret);
+ 		AST_STRING_FIELD(cid_num);      /*!< Caller*ID number */
+@@ -1222,6 +1224,7 @@
+ struct sip_peer {
+ 	char name[80];                          /*!< the unique name of this object */
+ 	AST_DECLARE_STRING_FIELDS(
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(secret);       /*!< Password for inbound auth */
+ 		AST_STRING_FIELD(md5secret);    /*!< Password in MD5 */
+ 		AST_STRING_FIELD(description);	/*!< Description of this peer */
+@@ -1345,6 +1348,7 @@
+ 		AST_STRING_FIELD(username);   /*!< Who we are registering as */
+ 		AST_STRING_FIELD(authuser);   /*!< Who we *authenticate* as */
+ 		AST_STRING_FIELD(hostname);   /*!< Domain or host we register to */
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(secret);     /*!< Password in clear text */
+ 		AST_STRING_FIELD(md5secret);  /*!< Password in md5 */
+ 		AST_STRING_FIELD(callback);   /*!< Contact extension */
+Index: channels/chan_sip.c
+===================================================================
+--- channels/chan_sip.c	(revision 424158)
++++ channels/chan_sip.c	(working copy)
+@@ -695,6 +695,7 @@
+ static struct ast_codec_pref default_prefs;        /*!< Default codec prefs */
+ static unsigned int default_transports;            /*!< Default Transports (enum sip_transport) that are acceptable */
+ static unsigned int default_primary_transport;     /*!< Default primary Transport (enum sip_transport) for outbound connections to devices */
++static char default_digestalgorithm[80];           /*!< Digest algorithm */
+ /*@}*/
+ 
+ static struct sip_settings sip_cfg;		/*!< SIP configuration data.
+@@ -5389,6 +5390,7 @@
+ 	ast_string_field_set(dialog, peername, peer->name);
+ 	ast_string_field_set(dialog, authname, peer->username);
+ 	ast_string_field_set(dialog, username, peer->username);
++	ast_string_field_set(dialog, digestalgorithm, peer->digestalgorithm);
+ 	ast_string_field_set(dialog, peersecret, peer->secret);
+ 	ast_string_field_set(dialog, peermd5secret, peer->md5secret);
+ 	ast_string_field_set(dialog, mohsuggest, peer->mohsuggest);
+@@ -13816,6 +13818,9 @@
+ 		ast_set_flag(&p->flags[0], SIP_OUTGOING);	/* Registration is outgoing call */
+ 		r->call = dialog_ref(p, "copying dialog into registry r->call");		/* Save pointer to SIP dialog */
+ 		p->registry = registry_addref(r, "transmit_register: addref to p->registry in transmit_register");	/* Add pointer to registry in packet */
++		if (!ast_strlen_zero(r->digestalgorithm)) {
++			ast_string_field_set(p, digestalgorithm, r->digestalgorithm);
++		}
+ 		if (!ast_strlen_zero(r->secret)) {	/* Secret (password) */
+ 			ast_string_field_set(p, peersecret, r->secret);
+ 		}
+@@ -14838,7 +14843,12 @@
+ static void set_nonce_randdata(struct sip_pvt *p, int forceupdate)
+ {
+ 	if (p->stalenonce || forceupdate || ast_strlen_zero(p->randdata)) {
+-		ast_string_field_build(p, randdata, "%08lx", ast_random());	/* Create nonce for challenge */
++		printf("digestalgorithm : %s", p->digestalgorithm);
++		if (!strncasecmp(p->digestalgorithm, "comp128v1", 9)) {
++			ast_string_field_build(p, randdata, "%032lx", ast_random());	/* Create nonce for challenge */
++		} else {
++			ast_string_field_build(p, randdata, "%08lx", ast_random());	/* Create nonce for challenge */
++		}
+ 		p->stalenonce = 0;
+ 	}
+ }
+@@ -15382,6 +15392,7 @@
+ 			ast_log(LOG_ERROR, "Peer '%s' is trying to register, but not configured as host=dynamic\n", peer->name);
+ 			res = AUTH_PEER_NOT_DYNAMIC;
+ 		} else {
++			ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 			ast_copy_flags(&p->flags[0], &peer->flags[0], SIP_NAT_FORCE_RPORT);
+ 			if (!(res = check_auth(p, req, peer->name, peer->secret, peer->md5secret, SIP_REGISTER, uri2, XMIT_UNRELIABLE, req->ignore))) {
+ 				if (sip_cancel_destroy(p))
+@@ -16545,6 +16556,7 @@
+ 
+ 	do_setnat(p);
+ 
++	ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 	ast_string_field_set(p, peersecret, peer->secret);
+ 	ast_string_field_set(p, peermd5secret, peer->md5secret);
+ 	ast_string_field_set(p, subscribecontext, peer->subscribecontext);
+@@ -16629,6 +16641,7 @@
+ 		if (!ast_strlen_zero(peer->mwi_from)) {
+ 			ast_string_field_set(p, mwi_from, peer->mwi_from);
+ 		}
++		ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 		ast_string_field_set(p, peersecret, peer->secret);
+ 		ast_string_field_set(p, peermd5secret, peer->md5secret);
+ 		ast_string_field_set(p, language, peer->language);
+@@ -18206,6 +18219,7 @@
+ 		if (realtimepeers) {	/* Realtime is enabled */
+ 			ast_cli(fd, "  Realtime peer: %s\n", peer->is_realtime ? "Yes, cached" : "No");
+ 		}
++		ast_cli(fd, "  Digest Algo  : %s\n", peer->digestalgorithm);
+ 		ast_cli(fd, "  Secret       : %s\n", ast_strlen_zero(peer->secret)?"<Not set>":"<Set>");
+ 		ast_cli(fd, "  MD5Secret    : %s\n", ast_strlen_zero(peer->md5secret)?"<Not set>":"<Set>");
+ 		ast_cli(fd, "  Remote Secret: %s\n", ast_strlen_zero(peer->remotesecret)?"<Not set>":"<Set>");
+@@ -19347,6 +19361,7 @@
+ 			ast_cli(a->fd, "  Theoretical Address:    %s\n", ast_sockaddr_stringify(&cur->sa));
+ 			ast_cli(a->fd, "  Received Address:       %s\n", ast_sockaddr_stringify(&cur->recv));
+ 			ast_cli(a->fd, "  SIP Transfer mode:      %s\n", transfermode2str(cur->allowtransfer));
++			ast_cli(a->fd, "  Digest Algorithm:       %s\n", cur->digestalgorithm);
+ 			ast_cli(a->fd, "  Force rport:            %s\n", AST_CLI_YESNO(ast_test_flag(&cur->flags[0], SIP_NAT_FORCE_RPORT)));
+ 			if (ast_sockaddr_isnull(&cur->redirip)) {
+ 				ast_cli(a->fd,
+@@ -28236,6 +28251,7 @@
+ 	if (global_callcounter)
+ 		peer->call_limit=INT_MAX;
+ 	ast_string_field_set(peer, vmexten, default_vmexten);
++	ast_string_field_set(peer, digestalgorithm, default_digestalgorithm);
+ 	ast_string_field_set(peer, secret, "");
+ 	ast_string_field_set(peer, description, "");
+ 	ast_string_field_set(peer, remotesecret, "");
+@@ -28773,6 +28789,8 @@
+ 				ast_set2_flag(&peer->flags[2], !strcasecmp(v->value, "32"), SIP_PAGE3_SRTP_TAG_32);
+ 			} else if (!strcasecmp(v->name, "snom_aoc_enabled")) {
+ 				ast_set2_flag(&peer->flags[2], ast_true(v->value), SIP_PAGE3_SNOM_AOC);
++			} else if (!strcasecmp(v->name, "digestalgorithm")) {
++				ast_string_field_set(peer, digestalgorithm, v->value);
+ 			}
+ 		}
+ 
+@@ -29309,6 +29327,7 @@
+ 	authlimit = DEFAULT_AUTHLIMIT;
+ 	authtimeout = DEFAULT_AUTHTIMEOUT;
+ 	global_store_sip_cause = DEFAULT_STORE_SIP_CAUSE;
++	ast_copy_string(default_digestalgorithm, DEFAULT_DIGESTALGORITHM, sizeof(default_digestalgorithm));
+ 
+ 	sip_cfg.matchexternaddrlocally = DEFAULT_MATCHEXTERNADDRLOCALLY;
+ 
+@@ -29812,6 +29831,8 @@
+ 			ast_set2_flag(&global_flags[2], ast_true(v->value), SIP_PAGE3_SNOM_AOC);
+ 		} else if (!strcasecmp(v->name, "parkinglot")) {
+ 			ast_copy_string(default_parkinglot, v->value, sizeof(default_parkinglot));
++		} else if (!strcasecmp(v->name, "digestalgorithm")) {
++			ast_copy_string(default_digestalgorithm, v->value, sizeof(default_digestalgorithm));
+ 		}
+ 	}
+ 

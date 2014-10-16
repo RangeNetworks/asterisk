@@ -1,0 +1,260 @@
+Index: include/asterisk/utils.h
+===================================================================
+--- include/asterisk/utils.h	(revision 424158)
++++ include/asterisk/utils.h	(working copy)
+@@ -219,6 +219,8 @@
+ void ast_md5_hash(char *output, const char *input);
+ /*! \brief Produces SHA1 hash based on input string */
+ void ast_sha1_hash(char *output, const char *input);
++/*!  \brief Produces SRES based on input Ki and RAND */
++void ast_comp128v1_hash(char *sres, const char *ki, const char *rand);
+ 
+ int ast_base64encode_full(char *dst, const unsigned char *src, int srclen, int max, int linebreaks);
+ 
+Index: main/utils.c
+===================================================================
+--- main/utils.c	(revision 424158)
++++ main/utils.c	(working copy)
+@@ -274,6 +274,49 @@
+ 		ptr += sprintf(ptr, "%2.2x", Message_Digest[x]);
+ }
+ 
++/*!  \brief Produces SRES based on input Ki and RAND */
++void ast_comp128v1_hash(char *sres, const char *ki, const char *rand)
++{
++	printf("ast_comp128v1_hash() - start\n");
++	printf("ast_comp128v1_hash() - ki : %s\n", ki);
++	printf("ast_comp128v1_hash() - rand : %s\n", rand);
++	char *ptr;
++	char command[160];
++
++	snprintf(command, sizeof(command), "/OpenBTS/comp128 0x%s 0x%s", ki, rand);
++	printf("ast_comp128v1_hash() - after sprintf\n");
++	printf("ast_comp128v1_hash() - command: %s\n", command);
++
++	FILE* f = popen(command, "r");
++	if (f == NULL) {
++		printf("ast_comp128v1_hash() - error: popen failed\n");
++		return;
++	}
++	char sres2[26];
++	char *str = fgets(sres2, 26, f);
++	if (str != NULL && strlen(str) == 25) str[24] = 0;
++	if (str == NULL || strlen(str) != 24) {
++		printf("ast_comp128v1_hash() - error: popen result failed\n");
++		return;
++	}
++	int st = pclose(f);
++	if (st == -1) {
++		printf("ast_comp128v1_hash() - error: pclose failed\n");
++		return;
++	}
++	// first 8 chars are SRES;  rest are Kc
++//	*kc = sres2+8;
++	sres2[8] = 0;
++
++	ptr = sres;
++	printf("ast_comp128v1_hash() - after ptr assign\n");
++	sprintf(ptr, "%s", sres2);
++	printf("ast_comp128v1_hash() - after ptr copy from sres2, ptr : %s\n", ptr);
++	for ( ; *ptr; ++ptr) *ptr = tolower(*ptr);
++	printf("ast_comp128v1_hash() - after ptr tolower() : %s\n", ptr);
++	printf("ast_comp128v1_hash() - exit\n");
++}
++
+ /*! \brief decode BASE64 encoded text */
+ int ast_base64decode(unsigned char *dst, const char *src, int max)
+ {
+Index: channels/sip/include/sip.h
+===================================================================
+--- channels/sip/include/sip.h	(revision 424158)
++++ channels/sip/include/sip.h	(working copy)
+@@ -224,6 +224,7 @@
+ #define DEFAULT_SDPOWNER   "root"          /*!< Default SDP username field in (o=) header unless re-defined in sip.conf */
+ #define DEFAULT_ENGINE     "asterisk"      /*!< Default RTP engine to use for sessions */
+ #define DEFAULT_STORE_SIP_CAUSE FALSE      /*!< Don't store HASH(SIP_CAUSE,<channel name>) for channels by default */
++#define DEFAULT_DIGESTALGORITHM "md5"      /*!< Default authentication digest algorithm */
+ #endif
+ /*@}*/
+ 
+@@ -1009,6 +1010,7 @@
+ 		AST_STRING_FIELD(authname);     /*!< Who we use for authentication */
+ 		AST_STRING_FIELD(uri);          /*!< Original requested URI */
+ 		AST_STRING_FIELD(okcontacturi); /*!< URI from the 200 OK on INVITE */
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(peersecret);   /*!< Password */
+ 		AST_STRING_FIELD(peermd5secret);
+ 		AST_STRING_FIELD(cid_num);      /*!< Caller*ID number */
+@@ -1222,6 +1224,7 @@
+ struct sip_peer {
+ 	char name[80];                          /*!< the unique name of this object */
+ 	AST_DECLARE_STRING_FIELDS(
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(secret);       /*!< Password for inbound auth */
+ 		AST_STRING_FIELD(md5secret);    /*!< Password in MD5 */
+ 		AST_STRING_FIELD(description);	/*!< Description of this peer */
+@@ -1345,6 +1348,7 @@
+ 		AST_STRING_FIELD(username);   /*!< Who we are registering as */
+ 		AST_STRING_FIELD(authuser);   /*!< Who we *authenticate* as */
+ 		AST_STRING_FIELD(hostname);   /*!< Domain or host we register to */
++		AST_STRING_FIELD(digestalgorithm); /*!< Digest algorithm */
+ 		AST_STRING_FIELD(secret);     /*!< Password in clear text */
+ 		AST_STRING_FIELD(md5secret);  /*!< Password in md5 */
+ 		AST_STRING_FIELD(callback);   /*!< Contact extension */
+Index: channels/chan_sip.c
+===================================================================
+--- channels/chan_sip.c	(revision 424158)
++++ channels/chan_sip.c	(working copy)
+@@ -695,6 +695,7 @@
+ static struct ast_codec_pref default_prefs;        /*!< Default codec prefs */
+ static unsigned int default_transports;            /*!< Default Transports (enum sip_transport) that are acceptable */
+ static unsigned int default_primary_transport;     /*!< Default primary Transport (enum sip_transport) for outbound connections to devices */
++static char default_digestalgorithm[80];           /*!< Digest algorithm */
+ /*@}*/
+ 
+ static struct sip_settings sip_cfg;		/*!< SIP configuration data.
+@@ -5389,6 +5390,7 @@
+ 	ast_string_field_set(dialog, peername, peer->name);
+ 	ast_string_field_set(dialog, authname, peer->username);
+ 	ast_string_field_set(dialog, username, peer->username);
++	ast_string_field_set(dialog, digestalgorithm, peer->digestalgorithm);
+ 	ast_string_field_set(dialog, peersecret, peer->secret);
+ 	ast_string_field_set(dialog, peermd5secret, peer->md5secret);
+ 	ast_string_field_set(dialog, mohsuggest, peer->mohsuggest);
+@@ -13816,6 +13818,9 @@
+ 		ast_set_flag(&p->flags[0], SIP_OUTGOING);	/* Registration is outgoing call */
+ 		r->call = dialog_ref(p, "copying dialog into registry r->call");		/* Save pointer to SIP dialog */
+ 		p->registry = registry_addref(r, "transmit_register: addref to p->registry in transmit_register");	/* Add pointer to registry in packet */
++		if (!ast_strlen_zero(r->digestalgorithm)) {
++			ast_string_field_set(p, digestalgorithm, r->digestalgorithm);
++		}
+ 		if (!ast_strlen_zero(r->secret)) {	/* Secret (password) */
+ 			ast_string_field_set(p, peersecret, r->secret);
+ 		}
+@@ -14838,7 +14843,12 @@
+ static void set_nonce_randdata(struct sip_pvt *p, int forceupdate)
+ {
+ 	if (p->stalenonce || forceupdate || ast_strlen_zero(p->randdata)) {
+-		ast_string_field_build(p, randdata, "%08lx", ast_random());	/* Create nonce for challenge */
++		printf("digestalgorithm : %s", p->digestalgorithm);
++		if (!strncasecmp(p->digestalgorithm, "comp128v1", 9)) {
++			ast_string_field_build(p, randdata, "%032lx", ast_random());	/* Create nonce for challenge */
++		} else {
++			ast_string_field_build(p, randdata, "%08lx", ast_random());	/* Create nonce for challenge */
++		}
+ 		p->stalenonce = 0;
+ 	}
+ }
+@@ -14979,8 +14989,20 @@
+ 	} else {
+ 		char a1[256];
+ 
+-		snprintf(a1, sizeof(a1), "%s:%s:%s", username, p->realm, secret);
++		if (!strncasecmp(p->digestalgorithm, "comp128v1", 9)) {
++			char sres[80];
++			ast_comp128v1_hash(sres, secret, usednonce);
++			printf("secret          = %s\n", secret);
++			printf("nonce           = %s\n", usednonce);
++			printf("sres            = %s\n", sres);
++			snprintf(a1, sizeof(a1), "%s:%s:%s", username, p->realm, sres);
++		} else {
++			snprintf(a1, sizeof(a1), "%s:%s:%s", username, p->realm, secret);
++		}
++
+ 		ast_md5_hash(a1_hash, a1);
++		printf("a1              = %s\n", a1);
++		printf("a1_hash         = %s\n", a1_hash);
+ 	}
+ 
+ 	/* compute the expected response to compare with what we received */
+@@ -14994,8 +15016,15 @@
+ 		ast_md5_hash(a2_hash, a2);
+ 		snprintf(resp, sizeof(resp), "%s:%s:%s", a1_hash, usednonce, a2_hash);
+ 		ast_md5_hash(resp_hash, resp);
++		printf("a2              = %s\n", a2);
++		printf("a2_hash         = %s\n", a2_hash);
++		printf("resp            = %s\n", resp);
++		printf("resp_hash       = %s\n", resp_hash);
+ 	}
+-
++	printf("keys[K_RESP].s  = %s\n", keys[K_RESP].s);
++	printf("keys[K_URI].s   = %s\n", keys[K_URI].s);
++	printf("keys[K_USER].s  = %s\n", keys[K_USER].s);
++	printf("keys[K_NONCE].s = %s\n", keys[K_NONCE].s);
+ 	good_response = keys[K_RESP].s &&
+ 			!strncasecmp(keys[K_RESP].s, resp_hash, strlen(resp_hash));
+ 	if (wrongnonce) {
+@@ -15382,6 +15411,7 @@
+ 			ast_log(LOG_ERROR, "Peer '%s' is trying to register, but not configured as host=dynamic\n", peer->name);
+ 			res = AUTH_PEER_NOT_DYNAMIC;
+ 		} else {
++			ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 			ast_copy_flags(&p->flags[0], &peer->flags[0], SIP_NAT_FORCE_RPORT);
+ 			if (!(res = check_auth(p, req, peer->name, peer->secret, peer->md5secret, SIP_REGISTER, uri2, XMIT_UNRELIABLE, req->ignore))) {
+ 				if (sip_cancel_destroy(p))
+@@ -16545,6 +16575,7 @@
+ 
+ 	do_setnat(p);
+ 
++	ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 	ast_string_field_set(p, peersecret, peer->secret);
+ 	ast_string_field_set(p, peermd5secret, peer->md5secret);
+ 	ast_string_field_set(p, subscribecontext, peer->subscribecontext);
+@@ -16629,6 +16660,7 @@
+ 		if (!ast_strlen_zero(peer->mwi_from)) {
+ 			ast_string_field_set(p, mwi_from, peer->mwi_from);
+ 		}
++		ast_string_field_set(p, digestalgorithm, peer->digestalgorithm);
+ 		ast_string_field_set(p, peersecret, peer->secret);
+ 		ast_string_field_set(p, peermd5secret, peer->md5secret);
+ 		ast_string_field_set(p, language, peer->language);
+@@ -18206,6 +18238,7 @@
+ 		if (realtimepeers) {	/* Realtime is enabled */
+ 			ast_cli(fd, "  Realtime peer: %s\n", peer->is_realtime ? "Yes, cached" : "No");
+ 		}
++		ast_cli(fd, "  Digest Algo  : %s\n", peer->digestalgorithm);
+ 		ast_cli(fd, "  Secret       : %s\n", ast_strlen_zero(peer->secret)?"<Not set>":"<Set>");
+ 		ast_cli(fd, "  MD5Secret    : %s\n", ast_strlen_zero(peer->md5secret)?"<Not set>":"<Set>");
+ 		ast_cli(fd, "  Remote Secret: %s\n", ast_strlen_zero(peer->remotesecret)?"<Not set>":"<Set>");
+@@ -19347,6 +19380,7 @@
+ 			ast_cli(a->fd, "  Theoretical Address:    %s\n", ast_sockaddr_stringify(&cur->sa));
+ 			ast_cli(a->fd, "  Received Address:       %s\n", ast_sockaddr_stringify(&cur->recv));
+ 			ast_cli(a->fd, "  SIP Transfer mode:      %s\n", transfermode2str(cur->allowtransfer));
++			ast_cli(a->fd, "  Digest Algorithm:       %s\n", cur->digestalgorithm);
+ 			ast_cli(a->fd, "  Force rport:            %s\n", AST_CLI_YESNO(ast_test_flag(&cur->flags[0], SIP_NAT_FORCE_RPORT)));
+ 			if (ast_sockaddr_isnull(&cur->redirip)) {
+ 				ast_cli(a->fd,
+@@ -28236,6 +28270,7 @@
+ 	if (global_callcounter)
+ 		peer->call_limit=INT_MAX;
+ 	ast_string_field_set(peer, vmexten, default_vmexten);
++	ast_string_field_set(peer, digestalgorithm, default_digestalgorithm);
+ 	ast_string_field_set(peer, secret, "");
+ 	ast_string_field_set(peer, description, "");
+ 	ast_string_field_set(peer, remotesecret, "");
+@@ -28773,6 +28808,8 @@
+ 				ast_set2_flag(&peer->flags[2], !strcasecmp(v->value, "32"), SIP_PAGE3_SRTP_TAG_32);
+ 			} else if (!strcasecmp(v->name, "snom_aoc_enabled")) {
+ 				ast_set2_flag(&peer->flags[2], ast_true(v->value), SIP_PAGE3_SNOM_AOC);
++			} else if (!strcasecmp(v->name, "digestalgorithm")) {
++				ast_string_field_set(peer, digestalgorithm, v->value);
+ 			}
+ 		}
+ 
+@@ -29309,6 +29346,7 @@
+ 	authlimit = DEFAULT_AUTHLIMIT;
+ 	authtimeout = DEFAULT_AUTHTIMEOUT;
+ 	global_store_sip_cause = DEFAULT_STORE_SIP_CAUSE;
++	ast_copy_string(default_digestalgorithm, DEFAULT_DIGESTALGORITHM, sizeof(default_digestalgorithm));
+ 
+ 	sip_cfg.matchexternaddrlocally = DEFAULT_MATCHEXTERNADDRLOCALLY;
+ 
+@@ -29812,6 +29850,8 @@
+ 			ast_set2_flag(&global_flags[2], ast_true(v->value), SIP_PAGE3_SNOM_AOC);
+ 		} else if (!strcasecmp(v->name, "parkinglot")) {
+ 			ast_copy_string(default_parkinglot, v->value, sizeof(default_parkinglot));
++		} else if (!strcasecmp(v->name, "digestalgorithm")) {
++			ast_copy_string(default_digestalgorithm, v->value, sizeof(default_digestalgorithm));
+ 		}
+ 	}
+ 
