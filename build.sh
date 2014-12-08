@@ -37,5 +37,6 @@ sayAndDo tar zxf asterisk-$VERSION.tar.gz
 sayAndDo mkdir asterisk-$VERSION/debian
 sayAndDo cp -R debian/* asterisk-$VERSION/debian/
 sayAndDo cd asterisk-$VERSION
+sayAndDo patch -p0 < ../fix_pjproject_dependency.patch
 sayAndDo dpkg-buildpackage -us -uc
 
