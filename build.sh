@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=11.7.0
+VERSION=13.7.2
 
 sayAndDo () {
 	echo $@
@@ -10,17 +10,6 @@ sayAndDo () {
 		echo "ERROR: command failed!"
 		exit 1
 	fi
-}
-
-installIfMissing () {
-	dpkg -s $@ > /dev/null
-	if [ $? -ne 0 ]; then
-		echo " - oops, missing $@, installing"
-		sudo apt-get install $@
-	else
-		echo " - $@ ok"
-	fi
-	echo
 }
 
 if [ ! -f asterisk-$VERSION.tar.gz ]
@@ -37,6 +26,4 @@ sayAndDo tar zxf asterisk-$VERSION.tar.gz
 sayAndDo mkdir asterisk-$VERSION/debian
 sayAndDo cp -R debian/* asterisk-$VERSION/debian/
 sayAndDo cd asterisk-$VERSION
-sayAndDo patch -p0 < ../fix_pjproject_dependency.patch
 sayAndDo dpkg-buildpackage -us -uc
-
