@@ -74,7 +74,7 @@ config.status: configure
 	chmod 755 $(CURDIR)/debian/dummyprogs/fetch
 	
 	$(FETCH_ENV) ./configure			\
-		CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" \
+		CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS) -z muldefs" \
 		--host=$(DEB_HOST_GNU_TYPE)		\
 		--build=$(DEB_BUILD_GNU_TYPE)		\
 		--prefix=/usr				\
